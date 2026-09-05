@@ -1,0 +1,7 @@
+services:
+  datapulse:
+    build: .
+    environment:
+      APP_NAME: DataPulse
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
