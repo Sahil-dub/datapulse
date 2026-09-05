@@ -9,6 +9,7 @@ description = "Self-monitoring data and analytics platform"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "pydantic-settings>=2.6,<3.0",
+    "pandas>=2.2,<3.0",
 ]
 
 [project.optional-dependencies]
