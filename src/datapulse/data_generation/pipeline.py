@@ -4,6 +4,7 @@ from datapulse.data_generation.config import DataGenerationConfig
 from datapulse.data_generation.manifest import (
     build_source_manifest,
     build_source_manifest_entry,
+    validate_source_manifest,
     write_source_manifest,
 )
 from datapulse.data_generation.materialization import write_source_csv
@@ -96,6 +97,8 @@ def materialize_all_sources(
         manifest,
         Path(config.output_dir) / "manifest.json",
     )
+
+    validate_source_manifest(manifest_path)
 
     output_paths["manifest"] = manifest_path
 
