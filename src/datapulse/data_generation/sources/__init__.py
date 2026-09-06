@@ -22,6 +22,10 @@ from datapulse.data_generation.sources.support_tickets import (
     expected_support_ticket_columns,
     generate_support_tickets,
 )
+from datapulse.data_generation.sources.web_events import (
+    expected_web_event_columns,
+    generate_web_events,
+)
 
 __all__ = [
     "expected_customer_columns",
@@ -30,10 +34,12 @@ __all__ = [
     "expected_product_columns",
     "expected_subscription_columns",
     "expected_support_ticket_columns",
+    "expected_web_event_columns",
     "generate_customers",
     "generate_orders",
     "generate_payments",
     "generate_products",
     "generate_subscriptions",
     "generate_support_tickets",
+    "generate_web_events",
 ]
