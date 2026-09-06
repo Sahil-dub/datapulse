@@ -53,13 +53,87 @@ def test_materialize_all_sources_preserves_expected_columns(tmp_path: Path) -> N
     output_paths = materialize_all_sources(_config(tmp_path))
 
     expected_columns = {
-        "customers": {"customer_id", "first_name", "last_name", "email", "country", "signup_date", "customer_status", "acquisition_channel"},
-        "products": {"product_id", "product_name", "category", "unit_price", "product_status", "created_date"},
-        "orders": {"order_id", "customer_id", "product_id", "order_date", "quantity", "unit_price", "discount_amount", "shipping_amount", "order_total", "order_status", "sales_channel"},
-        "payments": {"payment_id", "order_id", "payment_date", "payment_method", "payment_amount", "payment_status", "transaction_reference", "currency", "source_updated_at"},
-        "subscriptions": {"subscription_id", "customer_id", "plan_type", "subscription_status", "billing_frequency", "start_date", "end_date", "monthly_fee", "auto_renew", "source_updated_at"},
-        "support_tickets": {"ticket_id", "customer_id", "ticket_created_at", "ticket_updated_at", "ticket_category", "priority", "ticket_status", "resolution_channel", "assigned_team", "resolution_time_hours", "customer_satisfaction_score"},
-        "web_events": {"event_id", "event_timestamp", "source_received_at", "session_id", "customer_id", "event_type", "page_type", "device_type", "traffic_source", "product_id", "order_id", "revenue_amount"},
+        "customers": {
+            "customer_id",
+            "first_name",
+            "last_name",
+            "email",
+            "country",
+            "signup_date",
+            "customer_status",
+            "acquisition_channel",
+        },
+        "products": {
+            "product_id",
+            "product_name",
+            "category",
+            "unit_price",
+            "product_status",
+            "created_date",
+        },
+        "orders": {
+            "order_id",
+            "customer_id",
+            "product_id",
+            "order_date",
+            "quantity",
+            "unit_price",
+            "discount_amount",
+            "shipping_amount",
+            "order_total",
+            "order_status",
+            "sales_channel",
+        },
+        "payments": {
+            "payment_id",
+            "order_id",
+            "payment_date",
+            "payment_method",
+            "payment_amount",
+            "payment_status",
+            "transaction_reference",
+            "currency",
+            "source_updated_at",
+        },
+        "subscriptions": {
+            "subscription_id",
+            "customer_id",
+            "plan_type",
+            "subscription_status",
+            "billing_frequency",
+            "start_date",
+            "end_date",
+            "monthly_fee",
+            "auto_renew",
+            "source_updated_at",
+        },
+        "support_tickets": {
+            "ticket_id",
+            "customer_id",
+            "ticket_created_at",
+            "ticket_updated_at",
+            "ticket_category",
+            "priority",
+            "ticket_status",
+            "resolution_channel",
+            "assigned_team",
+            "resolution_time_hours",
+            "customer_satisfaction_score",
+        },
+        "web_events": {
+            "event_id",
+            "event_timestamp",
+            "source_received_at",
+            "session_id",
+            "customer_id",
+            "event_type",
+            "page_type",
+            "device_type",
+            "traffic_source",
+            "product_id",
+            "order_id",
+            "revenue_amount",
+        },
     }
 
     for source_name, columns in expected_columns.items():
@@ -137,11 +211,21 @@ def test_materialize_all_sources_creates_manifest(tmp_path: Path) -> None:
     assert manifest["schema_drift_scenarios"] == []
     assert len(manifest["sources"]) == 7
     source_names = {entry["source_name"] for entry in manifest["sources"]}
-    assert source_names == {"customers", "products", "orders", "payments", "subscriptions", "support_tickets", "web_events"}
+    assert source_names == {
+        "customers",
+        "products",
+        "orders",
+        "payments",
+        "subscriptions",
+        "support_tickets",
+        "web_events",
+    }
 
 
 def test_materialize_all_sources_records_schema_drift(tmp_path: Path) -> None:
-    drift_config = SchemaDriftConfig(enabled=True, scenarios=(CUSTOMER_EMAIL_RENAME, PRODUCT_ADD_BRAND))
+    drift_config = SchemaDriftConfig(
+        enabled=True, scenarios=(CUSTOMER_EMAIL_RENAME, PRODUCT_ADD_BRAND)
+    )
     output_paths = materialize_all_sources(_config(tmp_path), schema_drift_config=drift_config)
     manifest = json.loads(output_paths["manifest"].read_text(encoding="utf-8"))
     assert manifest["schema_drift_scenarios"] == [CUSTOMER_EMAIL_RENAME, PRODUCT_ADD_BRAND]
@@ -150,7 +234,9 @@ def test_materialize_all_sources_records_schema_drift(tmp_path: Path) -> None:
     assert "brand" in source_entries["products"]["columns"]
 
 
-def test_materialize_all_sources_validates_manifest_after_writing(tmp_path: Path, monkeypatch) -> None:
+def test_materialize_all_sources_validates_manifest_after_writing(
+    tmp_path: Path, monkeypatch
+) -> None:
     import datapulse.data_generation.pipeline as pipeline
 
     calls: list[Path] = []
@@ -166,7 +252,9 @@ def test_materialize_all_sources_validates_manifest_after_writing(tmp_path: Path
     assert output_paths["manifest"] == tmp_path / "manifest.json"
 
 
-def test_materialize_all_sources_fails_if_manifest_validation_fails(tmp_path: Path, monkeypatch) -> None:
+def test_materialize_all_sources_fails_if_manifest_validation_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
     import datapulse.data_generation.pipeline as pipeline
 
     def fail_validation(_manifest_path: Path) -> None:
