@@ -397,3 +397,33 @@ def test_materialize_all_sources_records_schema_drift(
 
     assert "email_address" in source_entries["customers"]["columns"]
     assert "brand" in source_entries["products"]["columns"]
+
+
+def test_materialize_all_sources_fails_if_manifest_validation_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import datapulse.data_generation.pipeline as pipeline
+
+    config = DataGenerationConfig(
+        output_dir=tmp_path,
+        customers_count=20,
+        products_count=5,
+        orders_count=30,
+        payments_count=35,
+        subscriptions_count=10,
+        support_tickets_count=15,
+        web_events_count=50,
+    )
+
+    def fail_validation(_manifest_path: Path) -> None:
+        raise ValueError("Manifest validation failed: simulated failure.")
+
+    monkeypatch.setattr(pipeline, "validate_source_manifest", fail_validation)
+
+    try:
+        materialize_all_sources(config)
+    except ValueError as exc:
+        assert str(exc) == "Manifest validation failed: simulated failure."
+    else:
+        raise AssertionError("Expected manifest validation failure.")
