@@ -45,11 +45,14 @@ def test_materialize_all_sources_creates_expected_files(tmp_path: Path) -> None:
 
     for source_name in expected_sources:
         output_path = output_paths[source_name]
+
         assert output_path == (tmp_path / source_name / f"{source_name}.csv")
         assert output_path.is_file()
 
 
-def test_materialize_all_sources_preserves_expected_columns(tmp_path: Path) -> None:
+def test_materialize_all_sources_preserves_expected_columns(
+    tmp_path: Path,
+) -> None:
     output_paths = materialize_all_sources(_config(tmp_path))
 
     expected_columns = {
@@ -142,75 +145,128 @@ def test_materialize_all_sources_preserves_expected_columns(tmp_path: Path) -> N
         assert not dataframe.empty
 
 
-def test_materialize_all_sources_applies_customer_email_rename(tmp_path: Path) -> None:
-    drift_config = SchemaDriftConfig(enabled=True, scenarios=(CUSTOMER_EMAIL_RENAME,))
+def test_materialize_all_sources_applies_customer_email_rename(
+    tmp_path: Path,
+) -> None:
+    drift_config = SchemaDriftConfig(
+        enabled=True,
+        scenarios=(CUSTOMER_EMAIL_RENAME,),
+    )
+
     output_paths = materialize_all_sources(_config(tmp_path), drift_config)
+
     dataframe = pd.read_csv(output_paths["customers"])
+
     assert "email_address" in dataframe.columns
     assert "email" not in dataframe.columns
 
 
-def test_materialize_all_sources_applies_product_brand_addition(tmp_path: Path) -> None:
-    drift_config = SchemaDriftConfig(enabled=True, scenarios=(PRODUCT_ADD_BRAND,))
+def test_materialize_all_sources_applies_product_brand_addition(
+    tmp_path: Path,
+) -> None:
+    drift_config = SchemaDriftConfig(
+        enabled=True,
+        scenarios=(PRODUCT_ADD_BRAND,),
+    )
+
     output_paths = materialize_all_sources(_config(tmp_path), drift_config)
+
     dataframe = pd.read_csv(output_paths["products"])
+
     assert "brand" in dataframe.columns
     assert dataframe["brand"].eq("SYNTHETIC_BRAND").all()
 
 
-def test_materialize_all_sources_applies_order_column_removal(tmp_path: Path) -> None:
-    drift_config = SchemaDriftConfig(enabled=True, scenarios=(ORDER_REMOVE_SHIPPING_AMOUNT,))
+def test_materialize_all_sources_applies_order_column_removal(
+    tmp_path: Path,
+) -> None:
+    drift_config = SchemaDriftConfig(
+        enabled=True,
+        scenarios=(ORDER_REMOVE_SHIPPING_AMOUNT,),
+    )
+
     output_paths = materialize_all_sources(_config(tmp_path), drift_config)
+
     dataframe = pd.read_csv(output_paths["orders"])
+
     assert "shipping_amount" not in dataframe.columns
     assert "order_total" in dataframe.columns
 
 
-def test_materialize_all_sources_can_apply_multiple_drift_scenarios(tmp_path: Path) -> None:
+def test_materialize_all_sources_can_apply_multiple_drift_scenarios(
+    tmp_path: Path,
+) -> None:
     drift_config = SchemaDriftConfig(
         enabled=True,
-        scenarios=(CUSTOMER_EMAIL_RENAME, PRODUCT_ADD_BRAND, ORDER_REMOVE_SHIPPING_AMOUNT),
+        scenarios=(
+            CUSTOMER_EMAIL_RENAME,
+            PRODUCT_ADD_BRAND,
+            ORDER_REMOVE_SHIPPING_AMOUNT,
+        ),
     )
+
     output_paths = materialize_all_sources(_config(tmp_path), drift_config)
+
     customers = pd.read_csv(output_paths["customers"])
     products = pd.read_csv(output_paths["products"])
     orders = pd.read_csv(output_paths["orders"])
+
     assert "email_address" in customers.columns
     assert "email" not in customers.columns
     assert "brand" in products.columns
     assert "shipping_amount" not in orders.columns
 
 
-def test_materialize_all_sources_leaves_unrelated_sources_unchanged(tmp_path: Path) -> None:
-    drift_config = SchemaDriftConfig(enabled=True, scenarios=(CUSTOMER_EMAIL_RENAME,))
+def test_materialize_all_sources_leaves_unrelated_sources_unchanged(
+    tmp_path: Path,
+) -> None:
+    drift_config = SchemaDriftConfig(
+        enabled=True,
+        scenarios=(CUSTOMER_EMAIL_RENAME,),
+    )
+
     output_paths = materialize_all_sources(_config(tmp_path), drift_config)
+
     products = pd.read_csv(output_paths["products"])
     orders = pd.read_csv(output_paths["orders"])
+
     assert "brand" not in products.columns
     assert "shipping_amount" in orders.columns
 
 
-def test_materialize_all_sources_keeps_canonical_schema_by_default(tmp_path: Path) -> None:
+def test_materialize_all_sources_keeps_canonical_schema_by_default(
+    tmp_path: Path,
+) -> None:
     output_paths = materialize_all_sources(_config(tmp_path))
+
     customers = pd.read_csv(output_paths["customers"])
     products = pd.read_csv(output_paths["products"])
     orders = pd.read_csv(output_paths["orders"])
+
     assert "email" in customers.columns
     assert "email_address" not in customers.columns
     assert "brand" not in products.columns
     assert "shipping_amount" in orders.columns
 
 
-def test_materialize_all_sources_creates_manifest(tmp_path: Path) -> None:
+def test_materialize_all_sources_creates_manifest(
+    tmp_path: Path,
+) -> None:
     output_paths = materialize_all_sources(_config(tmp_path))
+
     manifest_path = output_paths["manifest"]
+
     assert manifest_path == tmp_path / "manifest.json"
     assert manifest_path.is_file()
+
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
     assert "generated_at" in manifest
     assert manifest["schema_drift_scenarios"] == []
     assert len(manifest["sources"]) == 7
+
     source_names = {entry["source_name"] for entry in manifest["sources"]}
+
     assert source_names == {
         "customers",
         "products",
@@ -222,14 +278,31 @@ def test_materialize_all_sources_creates_manifest(tmp_path: Path) -> None:
     }
 
 
-def test_materialize_all_sources_records_schema_drift(tmp_path: Path) -> None:
+def test_materialize_all_sources_records_schema_drift(
+    tmp_path: Path,
+) -> None:
     drift_config = SchemaDriftConfig(
-        enabled=True, scenarios=(CUSTOMER_EMAIL_RENAME, PRODUCT_ADD_BRAND)
+        enabled=True,
+        scenarios=(
+            CUSTOMER_EMAIL_RENAME,
+            PRODUCT_ADD_BRAND,
+        ),
     )
-    output_paths = materialize_all_sources(_config(tmp_path), schema_drift_config=drift_config)
+
+    output_paths = materialize_all_sources(
+        _config(tmp_path),
+        schema_drift_config=drift_config,
+    )
+
     manifest = json.loads(output_paths["manifest"].read_text(encoding="utf-8"))
-    assert manifest["schema_drift_scenarios"] == [CUSTOMER_EMAIL_RENAME, PRODUCT_ADD_BRAND]
+
+    assert manifest["schema_drift_scenarios"] == [
+        CUSTOMER_EMAIL_RENAME,
+        PRODUCT_ADD_BRAND,
+    ]
+
     source_entries = {entry["source_name"]: entry for entry in manifest["sources"]}
+
     assert "email_address" in source_entries["customers"]["columns"]
     assert "brand" in source_entries["products"]["columns"]
 
