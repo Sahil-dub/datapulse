@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -7,6 +8,7 @@ from datapulse.data_generation.manifest import (
     build_source_manifest,
     build_source_manifest_entry,
     calculate_file_sha256,
+    validate_source_manifest,
     write_source_manifest,
 )
 
@@ -115,3 +117,80 @@ def test_write_source_manifest_creates_json_file(tmp_path: Path) -> None:
     written = output_path.read_text(encoding="utf-8")
     assert '"customers"' in written
     assert '"row_count": 10' in written
+
+
+def _build_valid_manifest(tmp_path: Path) -> Path:
+    dataframe = pd.DataFrame(
+        {
+            "id": [1, 2],
+            "value": ["A", "B"],
+        }
+    )
+    source_path = tmp_path / "customers.csv"
+    dataframe.to_csv(source_path, index=False)
+
+    entry = build_source_manifest_entry(
+        source_name="customers",
+        dataframe=dataframe,
+        file_path=source_path,
+    )
+    return write_source_manifest(
+        build_source_manifest([entry]),
+        tmp_path / "manifest.json",
+    )
+
+
+def test_validate_source_manifest_accepts_matching_files(tmp_path: Path) -> None:
+    manifest_path = _build_valid_manifest(tmp_path)
+
+    validate_source_manifest(manifest_path)
+
+
+def test_validate_source_manifest_rejects_missing_source_file(tmp_path: Path) -> None:
+    manifest_path = _build_valid_manifest(tmp_path)
+    (tmp_path / "customers.csv").unlink()
+
+    with pytest.raises(ValueError, match="source file does not exist"):
+        validate_source_manifest(manifest_path)
+
+
+def test_validate_source_manifest_rejects_modified_source_file(tmp_path: Path) -> None:
+    manifest_path = _build_valid_manifest(tmp_path)
+    (tmp_path / "customers.csv").write_text(
+        "id,value\n1,A\n2,B\n3,C\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="row count mismatch|SHA-256 mismatch"):
+        validate_source_manifest(manifest_path)
+
+
+def test_validate_source_manifest_rejects_schema_change(tmp_path: Path) -> None:
+    manifest_path = _build_valid_manifest(tmp_path)
+    (tmp_path / "customers.csv").write_text(
+        "id,amount\n1,A\n2,B\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="column mismatch"):
+        validate_source_manifest(manifest_path)
+
+
+def test_validate_source_manifest_rejects_duplicate_source_names(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _build_valid_manifest(tmp_path)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["sources"].append(payload["sources"][0].copy())
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source names must be unique"):
+        validate_source_manifest(manifest_path)
+
+
+def test_validate_source_manifest_rejects_invalid_json(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{not-json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        validate_source_manifest(manifest_path)
