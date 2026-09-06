@@ -2,6 +2,17 @@ from pathlib import Path
 
 from datapulse.data_generation.config import DataGenerationConfig
 from datapulse.data_generation.materialization import write_source_csv
+from datapulse.data_generation.schema_drift import (
+    apply_customer_email_rename,
+    apply_order_remove_shipping_amount,
+    apply_product_add_brand,
+)
+from datapulse.data_generation.schema_drift_config import (
+    CUSTOMER_EMAIL_RENAME,
+    ORDER_REMOVE_SHIPPING_AMOUNT,
+    PRODUCT_ADD_BRAND,
+    SchemaDriftConfig,
+)
 from datapulse.data_generation.sources import (
     generate_customers,
     generate_orders,
@@ -15,6 +26,7 @@ from datapulse.data_generation.sources import (
 
 def materialize_all_sources(
     config: DataGenerationConfig,
+    schema_drift_config: SchemaDriftConfig | None = None,
 ) -> dict[str, Path]:
     """Generate and materialize all synthetic source datasets.
 
@@ -28,6 +40,18 @@ def materialize_all_sources(
     subscriptions = generate_subscriptions(config, customers)
     support_tickets = generate_support_tickets(config, customers)
     web_events = generate_web_events(config, customers, products, orders)
+
+    drift_config = schema_drift_config or SchemaDriftConfig()
+
+    if drift_config.enabled:
+        if CUSTOMER_EMAIL_RENAME in drift_config.scenarios:
+            customers = apply_customer_email_rename(customers)
+
+        if PRODUCT_ADD_BRAND in drift_config.scenarios:
+            products = apply_product_add_brand(products)
+
+        if ORDER_REMOVE_SHIPPING_AMOUNT in drift_config.scenarios:
+            orders = apply_order_remove_shipping_amount(orders)
 
     datasets = {
         "customers": customers,
