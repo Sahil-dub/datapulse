@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pandas as pd
 
 from datapulse.data_generation.config import DataGenerationConfig
@@ -56,16 +54,14 @@ def main() -> None:
         (subscriptions["monthly_fee"] <= 0).sum(),
     )
 
-    invalid_dates = (
-        subscriptions["end_date"].notna()
-        & (subscriptions["end_date"] < subscriptions["start_date"])
+    invalid_dates = subscriptions["end_date"].notna() & (
+        subscriptions["end_date"] < subscriptions["start_date"]
     )
     print("Invalid date relationships:", invalid_dates.sum())
 
-    cancelled_without_end = (
-        (subscriptions["subscription_status"] == "CANCELLED")
-        & subscriptions["end_date"].isna()
-    )
+    cancelled_without_end = (subscriptions["subscription_status"] == "CANCELLED") & subscriptions[
+        "end_date"
+    ].isna()
     print(
         "Cancelled subscriptions without end date:",
         cancelled_without_end.sum(),

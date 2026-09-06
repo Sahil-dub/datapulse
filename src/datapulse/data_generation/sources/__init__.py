@@ -18,6 +18,10 @@ from datapulse.data_generation.sources.subscriptions import (
     expected_subscription_columns,
     generate_subscriptions,
 )
+from datapulse.data_generation.sources.support_tickets import (
+    expected_support_ticket_columns,
+    generate_support_tickets,
+)
 
 __all__ = [
     "expected_customer_columns",
@@ -25,9 +29,11 @@ __all__ = [
     "expected_payment_columns",
     "expected_product_columns",
     "expected_subscription_columns",
+    "expected_support_ticket_columns",
     "generate_customers",
     "generate_orders",
     "generate_payments",
     "generate_products",
     "generate_subscriptions",
+    "generate_support_tickets",
 ]
