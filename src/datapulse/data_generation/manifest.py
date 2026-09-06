@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -52,6 +53,7 @@ def build_source_manifest_entry(
 
 def build_source_manifest(
     entries: list[dict[str, object]],
+    schema_drift_scenarios: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Build the top-level manifest for materialized source files."""
     if not entries:
@@ -64,5 +66,20 @@ def build_source_manifest(
 
     return {
         "generated_at": datetime.now(UTC).isoformat(),
+        "schema_drift_scenarios": list(schema_drift_scenarios),
         "sources": entries,
     }
+
+
+def write_source_manifest(
+    manifest: dict[str, object],
+    output_path: str | Path,
+) -> Path:
+    """Write a source manifest to a JSON file."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(manifest, file, indent=2)
+
+    return path

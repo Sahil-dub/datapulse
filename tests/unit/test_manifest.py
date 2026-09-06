@@ -7,6 +7,7 @@ from datapulse.data_generation.manifest import (
     build_source_manifest,
     build_source_manifest_entry,
     calculate_file_sha256,
+    write_source_manifest,
 )
 
 
@@ -82,7 +83,35 @@ def test_build_source_manifest_contains_generation_timestamp() -> None:
         }
     ]
 
-    manifest = build_source_manifest(entries)
+    manifest = build_source_manifest(
+        entries,
+        schema_drift_scenarios=("customer_email_rename",),
+    )
 
     assert "generated_at" in manifest
+    assert manifest["schema_drift_scenarios"] == ["customer_email_rename"]
     assert manifest["sources"] == entries
+
+
+def test_write_source_manifest_creates_json_file(tmp_path: Path) -> None:
+    manifest = {
+        "generated_at": "2026-09-06T00:00:00+00:00",
+        "schema_drift_scenarios": [],
+        "sources": [
+            {
+                "source_name": "customers",
+                "row_count": 10,
+            }
+        ],
+    }
+
+    output_path = write_source_manifest(
+        manifest,
+        tmp_path / "manifest.json",
+    )
+
+    assert output_path.is_file()
+
+    written = output_path.read_text(encoding="utf-8")
+    assert '"customers"' in written
+    assert '"row_count": 10' in written
