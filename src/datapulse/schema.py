@@ -7,7 +7,7 @@ EXPECTED_SCHEMAS = ("raw", "metadata")
 
 
 class DatabaseSchemaValidationError(RuntimeError):
-    """Raised when an expected DataPulse database schema is missing."""
+    """Raised when an expected DataPulse database schema is invalid."""
 
 
 def apply_raw_schema(engine: Engine) -> None:
@@ -28,17 +28,20 @@ def apply_metadata_schema(engine: Engine) -> None:
         connection.execute(text(migration_sql))
 
 
-def validate_database_schemas(engine: Engine) -> None:
-    """Validate that all required DataPulse PostgreSQL schemas exist."""
+def validate_database_schemas(
+    engine: Engine,
+    expected_owner: str,
+) -> None:
+    """Validate required DataPulse schemas and their ownership."""
     query = text(
-        "SELECT schema_name "
+        "SELECT schema_name, schema_owner "
         "FROM information_schema.schemata "
         "WHERE schema_name IN (:raw_schema, :metadata_schema)"
     )
 
     with engine.connect() as connection:
         existing_schemas = {
-            row[0]
+            row[0]: row[1]
             for row in connection.execute(
                 query,
                 {
@@ -48,9 +51,21 @@ def validate_database_schemas(engine: Engine) -> None:
             )
         }
 
-    missing_schemas = set(EXPECTED_SCHEMAS) - existing_schemas
+    missing_schemas = set(EXPECTED_SCHEMAS) - existing_schemas.keys()
     if missing_schemas:
         missing = ", ".join(sorted(missing_schemas))
         raise DatabaseSchemaValidationError(
             f"Required DataPulse database schemas are missing: {missing}"
+        )
+
+    incorrectly_owned = {
+        schema_name
+        for schema_name, schema_owner in existing_schemas.items()
+        if schema_owner != expected_owner
+    }
+
+    if incorrectly_owned:
+        invalid = ", ".join(sorted(incorrectly_owned))
+        raise DatabaseSchemaValidationError(
+            f"DataPulse database schemas have unexpected owners: {invalid}"
         )
