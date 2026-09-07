@@ -41,7 +41,10 @@ def validate_database_schemas(engine: Engine) -> None:
             row[0]
             for row in connection.execute(
                 query,
-                {"raw_schema": EXPECTED_SCHEMAS[0], "metadata_schema": EXPECTED_SCHEMAS[1]},
+                {
+                    "raw_schema": EXPECTED_SCHEMAS[0],
+                    "metadata_schema": EXPECTED_SCHEMAS[1],
+                },
             )
         }
 
