@@ -12,3 +12,12 @@ def apply_raw_schema(engine: Engine) -> None:
 
     with engine.begin() as connection:
         connection.execute(text(migration_sql))
+
+
+def apply_metadata_schema(engine: Engine) -> None:
+    """Create the metadata PostgreSQL schema if it does not already exist."""
+    migration_path = MIGRATIONS_DIR / "002_create_metadata_schema.sql"
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    with engine.begin() as connection:
+        connection.execute(text(migration_sql))
