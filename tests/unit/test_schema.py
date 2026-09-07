@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from datapulse.schema import (
-    DatabaseSchemaValidationError,
     MIGRATIONS_DIR,
+    DatabaseSchemaValidationError,
     validate_database_schemas,
 )
 
