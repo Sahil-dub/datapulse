@@ -11,9 +11,7 @@ def test_settings_build_postgres_database_url() -> None:
         postgres_password="secret",
     )
 
-    assert settings.database_url == (
-        "postgresql+psycopg://reader:secret@db.example:5433/analytics"
-    )
+    assert settings.database_url == ("postgresql+psycopg://reader:secret@db.example:5433/analytics")
 
 
 def test_create_database_engine_uses_configured_url() -> None:
