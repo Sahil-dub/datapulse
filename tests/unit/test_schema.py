@@ -1,4 +1,12 @@
-from datapulse.schema import MIGRATIONS_DIR
+from unittest.mock import MagicMock
+
+import pytest
+
+from datapulse.schema import (
+    DatabaseSchemaValidationError,
+    MIGRATIONS_DIR,
+    validate_database_schemas,
+)
 
 
 def test_raw_schema_migration_exists() -> None:
@@ -25,3 +33,25 @@ def test_metadata_schema_migration_is_utf8_and_creates_metadata_schema() -> None
     migration_sql = migration_path.read_text(encoding="utf-8")
 
     assert "CREATE SCHEMA IF NOT EXISTS metadata;" in migration_sql
+
+
+def test_validate_database_schemas_passes_when_required_schemas_exist() -> None:
+    engine = MagicMock()
+    connection = engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value = [("raw",), ("metadata",)]
+
+    validate_database_schemas(engine)
+
+    connection.execute.assert_called_once()
+
+
+def test_validate_database_schemas_reports_missing_schemas() -> None:
+    engine = MagicMock()
+    connection = engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value = [("raw",)]
+
+    with pytest.raises(
+        DatabaseSchemaValidationError,
+        match="Required DataPulse database schemas are missing: metadata",
+    ):
+        validate_database_schemas(engine)
