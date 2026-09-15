@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from datapulse.db_loader import (
     DBLoaderError,
@@ -160,3 +161,51 @@ def test_load_dataframe_to_raw_in_batches_rejects_negative_batch_size() -> None:
             "customers",
             batch_size=-10,
         )
+
+
+def test_load_dataframe_to_raw_in_batches_uses_one_transaction() -> None:
+    dataframe = _customer_dataframe(5)
+    engine = MagicMock()
+
+    assert (
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=2,
+        )
+        == 5
+    )
+
+    assert engine.begin.call_count == 1
+
+    connection = engine.begin.return_value.__enter__.return_value
+    assert connection.execute.call_count == 3
+
+    batches = [call.args[1] for call in connection.execute.call_args_list]
+    assert [len(batch) for batch in batches] == [2, 2, 1]
+
+
+def test_load_dataframe_to_raw_in_batches_stops_after_batch_failure() -> None:
+    dataframe = _customer_dataframe(5)
+    engine = MagicMock()
+
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.execute.side_effect = [
+        None,
+        SQLAlchemyError("database failure"),
+    ]
+
+    with pytest.raises(
+        DBLoaderError,
+        match="customers: failed to load data into raw.customers",
+    ):
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=2,
+        )
+
+    assert engine.begin.call_count == 1
+    assert connection.execute.call_count == 2

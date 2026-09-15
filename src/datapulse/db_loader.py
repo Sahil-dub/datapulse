@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import pandas as pd
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from datapulse.source_schema import get_source_columns
@@ -59,21 +59,14 @@ def _build_insert_statement(
 
 
 def _load_rows(
-    engine: Engine,
+    connection: Connection,
     source_name: str,
     source_columns: tuple[str, ...],
     rows: list[dict[str, object]],
 ) -> None:
-    """Insert one batch of source rows into the raw table."""
+    """Insert one batch of source rows using an existing transaction."""
     insert_statement = _build_insert_statement(source_name, source_columns)
-
-    try:
-        with engine.begin() as connection:
-            connection.execute(insert_statement, rows)
-    except SQLAlchemyError as exc:
-        raise DBLoaderError(
-            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
-        ) from exc
+    connection.execute(insert_statement, rows)
 
 
 def load_dataframe_to_raw(
@@ -85,7 +78,14 @@ def load_dataframe_to_raw(
     source_columns = _validate_dataframe(dataframe, source_name)
 
     rows = dataframe.loc[:, source_columns].to_dict(orient="records")
-    _load_rows(engine, source_name, source_columns, rows)
+
+    try:
+        with engine.begin() as connection:
+            _load_rows(connection, source_name, source_columns, rows)
+    except SQLAlchemyError as exc:
+        raise DBLoaderError(
+            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
+        ) from exc
 
     return len(rows)
 
@@ -96,7 +96,7 @@ def load_dataframe_to_raw_in_batches(
     source_name: str,
     batch_size: int,
 ) -> int:
-    """Load a source DataFrame into a raw table using fixed-size batches."""
+    """Load a source DataFrame into a raw table using one transaction."""
     source_columns = _validate_dataframe(dataframe, source_name)
 
     if batch_size <= 0:
@@ -104,9 +104,15 @@ def load_dataframe_to_raw_in_batches(
 
     total_rows = len(dataframe)
 
-    for start in range(0, total_rows, batch_size):
-        batch = dataframe.iloc[start : start + batch_size]
-        rows = batch.loc[:, source_columns].to_dict(orient="records")
-        _load_rows(engine, source_name, source_columns, rows)
+    try:
+        with engine.begin() as connection:
+            for start in range(0, total_rows, batch_size):
+                batch = dataframe.iloc[start : start + batch_size]
+                rows = batch.loc[:, source_columns].to_dict(orient="records")
+                _load_rows(connection, source_name, source_columns, rows)
+    except SQLAlchemyError as exc:
+        raise DBLoaderError(
+            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
+        ) from exc
 
     return total_rows
