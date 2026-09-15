@@ -198,7 +198,7 @@ def test_load_dataframe_to_raw_in_batches_stops_after_batch_failure() -> None:
 
     with pytest.raises(
         DBLoaderError,
-        match="customers: failed to load data into raw.customers",
+        match="customers: failed to load batch 2 into raw.customers",
     ):
         load_dataframe_to_raw_in_batches(
             engine,
@@ -209,3 +209,63 @@ def test_load_dataframe_to_raw_in_batches_stops_after_batch_failure() -> None:
 
     assert engine.begin.call_count == 1
     assert connection.execute.call_count == 2
+
+
+def test_load_dataframe_to_raw_preserves_database_error_as_cause() -> None:
+    dataframe = _customer_dataframe(2)
+    engine = MagicMock()
+
+    database_error = SQLAlchemyError("database unavailable")
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.execute.side_effect = database_error
+
+    with pytest.raises(
+        DBLoaderError,
+        match="customers: failed to load data into raw.customers",
+    ) as exc_info:
+        load_dataframe_to_raw(engine, dataframe, "customers")
+
+    assert exc_info.value.__cause__ is database_error
+
+
+def test_load_dataframe_to_raw_in_batches_reports_failed_batch() -> None:
+    dataframe = _customer_dataframe(5)
+    engine = MagicMock()
+
+    database_error = SQLAlchemyError("database failure")
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.execute.side_effect = [
+        None,
+        database_error,
+    ]
+
+    with pytest.raises(
+        DBLoaderError,
+        match="customers: failed to load batch 2 into raw.customers",
+    ) as exc_info:
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=2,
+        )
+
+    assert exc_info.value.__cause__ is database_error
+    assert connection.execute.call_count == 2
+
+
+def test_load_dataframe_to_raw_in_batches_does_not_swallow_unexpected_errors() -> None:
+    dataframe = _customer_dataframe(5)
+    engine = MagicMock()
+
+    connection = engine.begin.return_value.__enter__.return_value
+    unexpected_error = TypeError("unexpected programming error")
+    connection.execute.side_effect = unexpected_error
+
+    with pytest.raises(TypeError, match="unexpected programming error"):
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=2,
+        )

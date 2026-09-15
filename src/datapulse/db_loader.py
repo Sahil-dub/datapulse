@@ -107,9 +107,19 @@ def load_dataframe_to_raw_in_batches(
     try:
         with engine.begin() as connection:
             for start in range(0, total_rows, batch_size):
+                batch_number = (start // batch_size) + 1
                 batch = dataframe.iloc[start : start + batch_size]
                 rows = batch.loc[:, source_columns].to_dict(orient="records")
-                _load_rows(connection, source_name, source_columns, rows)
+
+                try:
+                    _load_rows(connection, source_name, source_columns, rows)
+                except SQLAlchemyError as exc:
+                    raise DBLoaderError(
+                        f"{source_name}: failed to load batch {batch_number} "
+                        f"into {RAW_TABLES[source_name]}."
+                    ) from exc
+    except DBLoaderError:
+        raise
     except SQLAlchemyError as exc:
         raise DBLoaderError(
             f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
