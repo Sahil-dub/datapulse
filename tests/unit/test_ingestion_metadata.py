@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from datapulse.ingestion_metadata import (
     IngestionMetadataError,
+    apply_ingestion_source_row_counts,
     apply_ingestion_sources_table,
     complete_ingestion_run,
     fail_ingestion_run,
@@ -330,3 +331,61 @@ def test_ingestion_sources_migration_contains_expected_contract() -> None:
 
     for fragment in expected_fragments:
         assert fragment in migration_sql
+
+
+def test_ingestion_source_row_counts_migration_exists() -> None:
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "sql"
+        / "migrations"
+        / "012_add_ingestion_source_row_counts.sql"
+    )
+
+    assert migration_path.exists()
+
+
+def test_apply_ingestion_source_row_counts_executes_migration() -> None:
+    engine = MagicMock()
+
+    apply_ingestion_source_row_counts(engine)
+
+    engine.begin.assert_called_once()
+
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.execute.assert_called_once()
+
+
+def test_ingestion_source_row_counts_migration_contains_expected_contract() -> None:
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "sql"
+        / "migrations"
+        / "012_add_ingestion_source_row_counts.sql"
+    )
+
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    expected_fragments = (
+        "ALTER TABLE metadata.ingestion_sources",
+        "ADD COLUMN IF NOT EXISTS rows_read BIGINT NOT NULL DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS rows_loaded BIGINT NOT NULL DEFAULT 0",
+        "ck_ingestion_sources_rows_read",
+        "ck_ingestion_sources_rows_loaded",
+        "CHECK (rows_read >= 0)",
+        "CHECK (rows_loaded >= 0)",
+    )
+
+    for fragment in expected_fragments:
+        assert fragment in migration_sql
+
+
+def test_apply_ingestion_source_row_counts_is_idempotent() -> None:
+    engine = MagicMock()
+
+    apply_ingestion_source_row_counts(engine)
+    apply_ingestion_source_row_counts(engine)
+
+    assert engine.begin.call_count == 2
+
+    connection = engine.begin.return_value.__enter__.return_value
+    assert connection.execute.call_count == 2

@@ -185,3 +185,12 @@ def fail_ingestion_run(
         raise IngestionMetadataError(
             f"Ingestion run {ingestion_run_id}: failed to mark ingestion run as failed."
         ) from exc
+
+
+def apply_ingestion_source_row_counts(engine: Engine) -> None:
+    """Add row-count tracking columns to the ingestion sources table."""
+    migration_path = MIGRATIONS_DIR / "012_add_ingestion_source_row_counts.sql"
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    with engine.begin() as connection:
+        connection.execute(text(migration_sql))
