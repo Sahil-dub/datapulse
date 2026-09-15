@@ -23,12 +23,11 @@ class DBLoaderError(RuntimeError):
     """Raised when source data cannot be loaded into a raw database table."""
 
 
-def load_dataframe_to_raw(
-    engine: Engine,
+def _validate_dataframe(
     dataframe: pd.DataFrame,
     source_name: str,
-) -> int:
-    """Load a source DataFrame into its corresponding raw database table."""
+) -> tuple[str, ...]:
+    """Validate the source and DataFrame before loading."""
     if source_name not in RAW_TABLES:
         raise DBLoaderError(f"Unknown source: {source_name}")
 
@@ -45,13 +44,28 @@ def load_dataframe_to_raw(
             f"{source_name}: DataFrame is missing required columns: {', '.join(missing_columns)}"
         )
 
-    rows = dataframe.loc[:, source_columns].to_dict(orient="records")
+    return source_columns
+
+
+def _build_insert_statement(
+    source_name: str,
+    source_columns: tuple[str, ...],
+):
+    """Build the parameterized INSERT statement for a raw source table."""
     column_list = ", ".join(source_columns)
     parameter_list = ", ".join(f":{column}" for column in source_columns)
 
-    insert_statement = text(
-        f"INSERT INTO {RAW_TABLES[source_name]} ({column_list}) VALUES ({parameter_list})"
-    )
+    return text(f"INSERT INTO {RAW_TABLES[source_name]} ({column_list}) VALUES ({parameter_list})")
+
+
+def _load_rows(
+    engine: Engine,
+    source_name: str,
+    source_columns: tuple[str, ...],
+    rows: list[dict[str, object]],
+) -> None:
+    """Insert one batch of source rows into the raw table."""
+    insert_statement = _build_insert_statement(source_name, source_columns)
 
     try:
         with engine.begin() as connection:
@@ -61,4 +75,38 @@ def load_dataframe_to_raw(
             f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
         ) from exc
 
+
+def load_dataframe_to_raw(
+    engine: Engine,
+    dataframe: pd.DataFrame,
+    source_name: str,
+) -> int:
+    """Load a source DataFrame into its corresponding raw database table."""
+    source_columns = _validate_dataframe(dataframe, source_name)
+
+    rows = dataframe.loc[:, source_columns].to_dict(orient="records")
+    _load_rows(engine, source_name, source_columns, rows)
+
     return len(rows)
+
+
+def load_dataframe_to_raw_in_batches(
+    engine: Engine,
+    dataframe: pd.DataFrame,
+    source_name: str,
+    batch_size: int,
+) -> int:
+    """Load a source DataFrame into a raw table using fixed-size batches."""
+    source_columns = _validate_dataframe(dataframe, source_name)
+
+    if batch_size <= 0:
+        raise DBLoaderError("batch_size must be greater than zero.")
+
+    total_rows = len(dataframe)
+
+    for start in range(0, total_rows, batch_size):
+        batch = dataframe.iloc[start : start + batch_size]
+        rows = batch.loc[:, source_columns].to_dict(orient="records")
+        _load_rows(engine, source_name, source_columns, rows)
+
+    return total_rows

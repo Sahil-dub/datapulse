@@ -3,23 +3,30 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from datapulse.db_loader import DBLoaderError, load_dataframe_to_raw
+from datapulse.db_loader import (
+    DBLoaderError,
+    load_dataframe_to_raw,
+    load_dataframe_to_raw_in_batches,
+)
 
 
-def test_load_dataframe_to_raw_inserts_source_rows() -> None:
-    dataframe = pd.DataFrame(
+def _customer_dataframe(row_count: int) -> pd.DataFrame:
+    return pd.DataFrame(
         {
-            "customer_id": ["CUST-000001", "CUST-000002"],
-            "first_name": ["Alice", "Bob"],
-            "last_name": ["Smith", "Jones"],
-            "email": ["alice@example.com", "bob@example.com"],
-            "country": ["DE", "FR"],
-            "signup_date": ["2025-01-01", "2025-01-02"],
-            "customer_status": ["active", "active"],
-            "acquisition_channel": ["organic", "paid"],
+            "customer_id": [f"CUST-{index:06d}" for index in range(row_count)],
+            "first_name": [f"First{index}" for index in range(row_count)],
+            "last_name": [f"Last{index}" for index in range(row_count)],
+            "email": [f"user{index}@example.com" for index in range(row_count)],
+            "country": ["DE"] * row_count,
+            "signup_date": ["2025-01-01"] * row_count,
+            "customer_status": ["active"] * row_count,
+            "acquisition_channel": ["organic"] * row_count,
         }
     )
 
+
+def test_load_dataframe_to_raw_inserts_source_rows() -> None:
+    dataframe = _customer_dataframe(2)
     engine = MagicMock()
 
     assert load_dataframe_to_raw(engine, dataframe, "customers") == 2
@@ -80,3 +87,76 @@ def test_load_dataframe_to_raw_rejects_missing_columns() -> None:
         match="customers: DataFrame is missing required columns",
     ):
         load_dataframe_to_raw(engine, dataframe, "customers")
+
+
+def test_load_dataframe_to_raw_in_batches_splits_rows_into_batches() -> None:
+    dataframe = _customer_dataframe(5)
+    engine = MagicMock()
+
+    assert (
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=2,
+        )
+        == 5
+    )
+
+    connection = engine.begin.return_value.__enter__.return_value
+
+    assert connection.execute.call_count == 3
+
+    batches = [call.args[1] for call in connection.execute.call_args_list]
+
+    assert [len(batch) for batch in batches] == [2, 2, 1]
+
+
+def test_load_dataframe_to_raw_in_batches_handles_exact_batch_size() -> None:
+    dataframe = _customer_dataframe(4)
+    engine = MagicMock()
+
+    assert (
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=2,
+        )
+        == 4
+    )
+
+    connection = engine.begin.return_value.__enter__.return_value
+    assert connection.execute.call_count == 2
+
+
+def test_load_dataframe_to_raw_in_batches_rejects_invalid_batch_size() -> None:
+    dataframe = _customer_dataframe(2)
+    engine = MagicMock()
+
+    with pytest.raises(
+        DBLoaderError,
+        match="batch_size must be greater than zero",
+    ):
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=0,
+        )
+
+
+def test_load_dataframe_to_raw_in_batches_rejects_negative_batch_size() -> None:
+    dataframe = _customer_dataframe(2)
+    engine = MagicMock()
+
+    with pytest.raises(
+        DBLoaderError,
+        match="batch_size must be greater than zero",
+    ):
+        load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            "customers",
+            batch_size=-10,
+        )
