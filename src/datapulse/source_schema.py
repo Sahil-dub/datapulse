@@ -1,0 +1,91 @@
+SOURCE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "customers": (
+        "customer_id",
+        "first_name",
+        "last_name",
+        "email",
+        "country",
+        "signup_date",
+        "customer_status",
+        "acquisition_channel",
+    ),
+    "products": (
+        "product_id",
+        "product_name",
+        "category",
+        "unit_price",
+        "product_status",
+        "created_date",
+    ),
+    "orders": (
+        "order_id",
+        "customer_id",
+        "product_id",
+        "order_date",
+        "quantity",
+        "unit_price",
+        "discount_amount",
+        "shipping_amount",
+        "order_total",
+        "order_status",
+        "sales_channel",
+    ),
+    "payments": (
+        "payment_id",
+        "order_id",
+        "payment_date",
+        "payment_method",
+        "payment_amount",
+        "payment_status",
+        "transaction_reference",
+        "currency",
+        "source_updated_at",
+    ),
+    "subscriptions": (
+        "subscription_id",
+        "customer_id",
+        "plan_type",
+        "subscription_status",
+        "billing_frequency",
+        "start_date",
+        "end_date",
+        "monthly_fee",
+        "auto_renew",
+        "source_updated_at",
+    ),
+    "support_tickets": (
+        "ticket_id",
+        "customer_id",
+        "ticket_created_at",
+        "ticket_updated_at",
+        "ticket_category",
+        "priority",
+        "ticket_status",
+        "resolution_channel",
+        "assigned_team",
+        "resolution_time_hours",
+        "customer_satisfaction_score",
+    ),
+    "web_events": (
+        "event_id",
+        "event_timestamp",
+        "source_received_at",
+        "session_id",
+        "customer_id",
+        "event_type",
+        "page_type",
+        "device_type",
+        "traffic_source",
+        "product_id",
+        "order_id",
+        "revenue_amount",
+    ),
+}
+
+
+def get_source_columns(source_name: str) -> tuple[str, ...]:
+    """Return the expected columns for a supported source."""
+    try:
+        return SOURCE_COLUMNS[source_name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown source: {source_name}") from exc
