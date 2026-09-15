@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
+
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "sql" / "migrations"
+
+
+def apply_ingestion_sources_table(engine: Engine) -> None:
+    """Create the ingestion sources metadata table if it does not exist."""
+    migration_path = MIGRATIONS_DIR / "011_create_ingestion_sources_table.sql"
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    with engine.begin() as connection:
+        connection.execute(text(migration_sql))
 
 
 class IngestionMetadataError(RuntimeError):

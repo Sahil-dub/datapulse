@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from datapulse.ingestion_metadata import (
     IngestionMetadataError,
+    apply_ingestion_sources_table,
     complete_ingestion_run,
     fail_ingestion_run,
     start_ingestion_run,
@@ -274,3 +276,57 @@ def test_fail_ingestion_run_wraps_database_error() -> None:
         )
 
     assert exc_info.value.__cause__ is original_error
+
+
+def test_ingestion_sources_migration_exists() -> None:
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "sql"
+        / "migrations"
+        / "011_create_ingestion_sources_table.sql"
+    )
+
+    assert migration_path.exists()
+
+
+def test_apply_ingestion_sources_table_executes_migration() -> None:
+    engine = MagicMock()
+
+    apply_ingestion_sources_table(engine)
+
+    engine.begin.assert_called_once()
+
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.execute.assert_called_once()
+
+
+def test_ingestion_sources_migration_contains_expected_contract() -> None:
+    migration_path = (
+        Path(__file__).resolve().parents[2]
+        / "sql"
+        / "migrations"
+        / "011_create_ingestion_sources_table.sql"
+    )
+
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    expected_fragments = (
+        "CREATE TABLE IF NOT EXISTS metadata.ingestion_sources",
+        "ingestion_source_id BIGINT GENERATED ALWAYS AS IDENTITY",
+        "ingestion_run_id BIGINT NOT NULL",
+        "source_name TEXT NOT NULL",
+        "source_file_name TEXT NOT NULL",
+        "source_file_path TEXT NOT NULL",
+        "source_status TEXT NOT NULL DEFAULT 'PENDING'",
+        "started_at TIMESTAMPTZ NOT NULL",
+        "finished_at TIMESTAMPTZ",
+        "error_message TEXT",
+        "pk_ingestion_sources",
+        "fk_ingestion_sources_ingestion_runs",
+        "uq_ingestion_sources_run_file",
+        "ck_ingestion_sources_status",
+        "ck_ingestion_sources_finished_at",
+    )
+
+    for fragment in expected_fragments:
+        assert fragment in migration_sql
