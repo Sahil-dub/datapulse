@@ -39,3 +39,12 @@ def apply_raw_payments_table(engine: Engine) -> None:
 
     with engine.begin() as connection:
         connection.execute(text(migration_sql))
+
+
+def apply_raw_subscriptions_table(engine: Engine) -> None:
+    """Create the raw subscriptions table if it does not already exist."""
+    migration_path = MIGRATIONS_DIR / "007_create_raw_subscriptions_table.sql"
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    with engine.begin() as connection:
+        connection.execute(text(migration_sql))
