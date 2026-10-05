@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
+from datapulse.ingestion_contract import IngestionRequest
 from datapulse.ingestion_metadata import (
     IngestionMetadataError,
     IngestionSourceStateError,
@@ -15,6 +16,7 @@ from datapulse.ingestion_metadata import (
     fail_ingestion_run,
     fail_ingestion_source,
     start_ingestion_run,
+    start_ingestion_source,
 )
 
 
@@ -99,6 +101,109 @@ def test_start_ingestion_run_wraps_database_error() -> None:
         start_ingestion_run(
             engine,
             source_name="customers",
+        )
+
+    assert exc_info.value.__cause__ is original_error
+
+
+def test_start_ingestion_source_returns_generated_source_id() -> None:
+    engine = MagicMock()
+    connection = engine.begin.return_value.__enter__.return_value
+
+    result = MagicMock()
+    result.scalar_one.return_value = 101
+    connection.execute.return_value = result
+
+    request = IngestionRequest(
+        source_name="customers",
+        source_file_path=Path("data/generated/customers/customers.csv"),
+    )
+
+    ingestion_source_id = start_ingestion_source(
+        engine,
+        ingestion_run_id=42,
+        request=request,
+    )
+
+    assert ingestion_source_id == 101
+    engine.begin.assert_called_once()
+    connection.execute.assert_called_once()
+
+
+def test_start_ingestion_source_creates_pending_source() -> None:
+    engine = MagicMock()
+    connection = engine.begin.return_value.__enter__.return_value
+
+    result = MagicMock()
+    result.scalar_one.return_value = 101
+    connection.execute.return_value = result
+
+    request = IngestionRequest(
+        source_name="customers",
+        source_file_path=Path("data/generated/customers/customers.csv"),
+    )
+
+    start_ingestion_source(
+        engine,
+        ingestion_run_id=42,
+        request=request,
+    )
+
+    query = connection.execute.call_args.args[0]
+    parameters = connection.execute.call_args.args[1]
+
+    assert "source_status" in str(query)
+    assert "'PENDING'" in str(query)
+    assert parameters["ingestion_run_id"] == 42
+    assert parameters["source_name"] == "customers"
+    assert parameters["source_file_name"] == "customers.csv"
+    assert (
+        parameters["source_file_path"]
+        == "data/generated/customers/customers.csv"
+    )
+    assert isinstance(parameters["started_at"], datetime)
+
+
+def test_start_ingestion_source_rejects_empty_source_name() -> None:
+    engine = MagicMock()
+    request = IngestionRequest(
+        source_name="",
+        source_file_path=Path("customers.csv"),
+    )
+
+    with pytest.raises(
+        IngestionMetadataError,
+        match="source_name must not be empty",
+    ):
+        start_ingestion_source(
+            engine,
+            ingestion_run_id=42,
+            request=request,
+        )
+
+    engine.begin.assert_not_called()
+
+
+def test_start_ingestion_source_wraps_database_error() -> None:
+    engine = MagicMock()
+    connection = engine.begin.return_value.__enter__.return_value
+
+    original_error = SQLAlchemyError("database failure")
+    connection.execute.side_effect = original_error
+
+    request = IngestionRequest(
+        source_name="customers",
+        source_file_path=Path("customers.csv"),
+    )
+
+    with pytest.raises(
+        IngestionMetadataError,
+        match="customers: failed to start ingestion source",
+    ) as exc_info:
+        start_ingestion_source(
+            engine,
+            ingestion_run_id=42,
+            request=request,
         )
 
     assert exc_info.value.__cause__ is original_error
