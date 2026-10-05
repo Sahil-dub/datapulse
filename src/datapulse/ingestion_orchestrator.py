@@ -15,6 +15,8 @@ from datapulse.ingestion_contract import (
 from datapulse.ingestion_metadata import (
     complete_ingestion_run,
     complete_ingestion_source,
+    fail_ingestion_run,
+    fail_ingestion_source,
     start_ingestion_run,
     start_ingestion_source,
 )
@@ -28,7 +30,7 @@ def ingest_source(
     request: IngestionRequest,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> IngestionResult:
-    """Run the successful single-source ingestion workflow."""
+    """Run the single-source ingestion workflow."""
     ingestion_run_id = start_ingestion_run(
         engine,
         source_name=request.source_name,
@@ -40,21 +42,53 @@ def ingest_source(
         request=request,
     )
 
-    dataframe = read_csv_file(request.source_file_path)
-    rows_read = len(dataframe)
+    rows_read = 0
+    rows_loaded = 0
 
-    validate_csv_schema(
-        dataframe,
-        expected_columns=get_source_columns(request.source_name),
-        source_name=request.source_name,
-    )
+    try:
+        dataframe = read_csv_file(request.source_file_path)
+        rows_read = len(dataframe)
 
-    rows_loaded = load_dataframe_to_raw_in_batches(
-        engine,
-        dataframe,
-        source_name=request.source_name,
-        batch_size=batch_size,
-    )
+        validate_csv_schema(
+            dataframe,
+            expected_columns=get_source_columns(request.source_name),
+            source_name=request.source_name,
+        )
+
+        rows_loaded = load_dataframe_to_raw_in_batches(
+            engine,
+            dataframe,
+            source_name=request.source_name,
+            batch_size=batch_size,
+        )
+    except Exception as exc:
+        error_message = str(exc) or exc.__class__.__name__
+
+        fail_ingestion_source(
+            engine,
+            ingestion_source_id=ingestion_source_id,
+            rows_read=rows_read,
+            rows_loaded=rows_loaded,
+            error_message=error_message,
+        )
+        fail_ingestion_run(
+            engine,
+            ingestion_run_id=ingestion_run_id,
+            rows_read=rows_read,
+            rows_loaded=rows_loaded,
+            error_message=error_message,
+        )
+
+        return IngestionResult(
+            ingestion_run_id=ingestion_run_id,
+            ingestion_source_id=ingestion_source_id,
+            source_name=request.source_name,
+            source_file_path=Path(request.source_file_path),
+            outcome=IngestionOutcome.FAILED,
+            rows_read=rows_read,
+            rows_loaded=rows_loaded,
+            error_message=error_message,
+        )
 
     complete_ingestion_source(
         engine,
