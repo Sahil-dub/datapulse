@@ -6,6 +6,8 @@ from pathlib import Path
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from datapulse.ingestion_contract import IngestionRequest
+
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "sql" / "migrations"
 
 
@@ -81,9 +83,65 @@ def start_ingestion_run(
             )
             ingestion_run_id = result.scalar_one()
     except SQLAlchemyError as exc:
-        raise IngestionMetadataError(f"{source_name}: failed to start ingestion run.") from exc
+        raise IngestionMetadataError(
+            f"{source_name}: failed to start ingestion run."
+        ) from exc
 
     return int(ingestion_run_id)
+
+
+def start_ingestion_source(
+    engine: Engine,
+    ingestion_run_id: int,
+    request: IngestionRequest,
+) -> int:
+    """Create a PENDING ingestion source and return its generated ID."""
+    if not request.source_name:
+        raise IngestionMetadataError("source_name must not be empty.")
+
+    started_at = datetime.now(UTC)
+
+    query = text(
+        """
+        INSERT INTO metadata.ingestion_sources (
+            ingestion_run_id,
+            source_name,
+            source_file_name,
+            source_file_path,
+            source_status,
+            started_at
+        )
+        VALUES (
+            :ingestion_run_id,
+            :source_name,
+            :source_file_name,
+            :source_file_path,
+            'PENDING',
+            :started_at
+        )
+        RETURNING ingestion_source_id
+        """
+    )
+
+    try:
+        with engine.begin() as connection:
+            result = connection.execute(
+                query,
+                {
+                    "ingestion_run_id": ingestion_run_id,
+                    "source_name": request.source_name,
+                    "source_file_name": request.source_file_path.name,
+                    "source_file_path": str(request.source_file_path),
+                    "started_at": started_at,
+                },
+            )
+            ingestion_source_id = result.scalar_one()
+    except SQLAlchemyError as exc:
+        raise IngestionMetadataError(
+            f"{request.source_name}: failed to start ingestion source."
+        ) from exc
+
+    return int(ingestion_source_id)
 
 
 def complete_ingestion_run(
