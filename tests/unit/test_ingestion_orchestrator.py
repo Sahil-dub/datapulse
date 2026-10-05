@@ -265,7 +265,6 @@ def test_ingest_source_uses_default_batch_size(monkeypatch) -> None:
     assert load_raw.call_args.kwargs["batch_size"] == 1_000
 
 
-
 def test_ingest_source_short_circuits_after_schema_validation_failure(monkeypatch) -> None:
     engine = MagicMock()
     request = IngestionRequest(
@@ -404,6 +403,7 @@ def test_ingest_source_propagates_metadata_start_failure(monkeypatch) -> None:
 
     start_run.assert_called_once_with(engine, source_name="customers")
     start_source.assert_not_called()
+
 
 def test_ingest_source_marks_failure_when_file_read_fails(monkeypatch) -> None:
     engine = MagicMock()
