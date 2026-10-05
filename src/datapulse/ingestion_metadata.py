@@ -83,9 +83,7 @@ def start_ingestion_run(
             )
             ingestion_run_id = result.scalar_one()
     except SQLAlchemyError as exc:
-        raise IngestionMetadataError(
-            f"{source_name}: failed to start ingestion run."
-        ) from exc
+        raise IngestionMetadataError(f"{source_name}: failed to start ingestion run.") from exc
 
     return int(ingestion_run_id)
 

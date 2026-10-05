@@ -157,10 +157,7 @@ def test_start_ingestion_source_creates_pending_source() -> None:
     assert parameters["ingestion_run_id"] == 42
     assert parameters["source_name"] == "customers"
     assert parameters["source_file_name"] == "customers.csv"
-    assert (
-        parameters["source_file_path"]
-        == "data/generated/customers/customers.csv"
-    )
+    assert parameters["source_file_path"] == str(request.source_file_path)
     assert isinstance(parameters["started_at"], datetime)
 
 
