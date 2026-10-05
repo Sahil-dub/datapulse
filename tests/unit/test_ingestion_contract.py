@@ -16,9 +16,7 @@ def test_ingestion_request_captures_source_name_and_path() -> None:
     )
 
     assert request.source_name == "customers"
-    assert request.source_file_path == Path(
-        "data/generated/customers/customers.csv"
-    )
+    assert request.source_file_path == Path("data/generated/customers/customers.csv")
 
 
 def test_ingestion_request_is_immutable() -> None:
