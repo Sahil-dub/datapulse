@@ -9,6 +9,14 @@ from sqlalchemy.exc import SQLAlchemyError
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "sql" / "migrations"
 
 
+class IngestionMetadataError(RuntimeError):
+    """Raised when ingestion metadata operations fail."""
+
+
+class IngestionSourceStateError(IngestionMetadataError):
+    """Raised when an ingestion source has an invalid lifecycle transition."""
+
+
 def apply_ingestion_sources_table(engine: Engine) -> None:
     """Create the ingestion sources metadata table if it does not exist."""
     migration_path = MIGRATIONS_DIR / "011_create_ingestion_sources_table.sql"
@@ -18,8 +26,13 @@ def apply_ingestion_sources_table(engine: Engine) -> None:
         connection.execute(text(migration_sql))
 
 
-class IngestionMetadataError(RuntimeError):
-    """Raised when ingestion run metadata cannot be updated."""
+def apply_ingestion_source_row_counts(engine: Engine) -> None:
+    """Add row-count tracking columns to the ingestion sources table."""
+    migration_path = MIGRATIONS_DIR / "012_add_ingestion_source_row_counts.sql"
+    migration_sql = migration_path.read_text(encoding="utf-8")
+
+    with engine.begin() as connection:
+        connection.execute(text(migration_sql))
 
 
 def start_ingestion_run(
@@ -70,7 +83,7 @@ def start_ingestion_run(
     except SQLAlchemyError as exc:
         raise IngestionMetadataError(f"{source_name}: failed to start ingestion run.") from exc
 
-    return ingestion_run_id
+    return int(ingestion_run_id)
 
 
 def complete_ingestion_run(
@@ -187,10 +200,93 @@ def fail_ingestion_run(
         ) from exc
 
 
-def apply_ingestion_source_row_counts(engine: Engine) -> None:
-    """Add row-count tracking columns to the ingestion sources table."""
-    migration_path = MIGRATIONS_DIR / "012_add_ingestion_source_row_counts.sql"
-    migration_sql = migration_path.read_text(encoding="utf-8")
+def complete_ingestion_source(
+    engine: Engine,
+    ingestion_source_id: int,
+    rows_read: int,
+    rows_loaded: int,
+) -> None:
+    """Mark a PENDING ingestion source as successfully loaded."""
+    finished_at = datetime.now(UTC)
 
-    with engine.begin() as connection:
-        connection.execute(text(migration_sql))
+    query = text(
+        """
+        UPDATE metadata.ingestion_sources
+        SET
+            source_status = 'SUCCESS',
+            rows_read = :rows_read,
+            rows_loaded = :rows_loaded,
+            finished_at = :finished_at,
+            error_message = NULL
+        WHERE ingestion_source_id = :ingestion_source_id
+          AND source_status = 'PENDING'
+        """
+    )
+
+    try:
+        with engine.begin() as connection:
+            result = connection.execute(
+                query,
+                {
+                    "ingestion_source_id": ingestion_source_id,
+                    "rows_read": rows_read,
+                    "rows_loaded": rows_loaded,
+                    "finished_at": finished_at,
+                },
+            )
+    except SQLAlchemyError as exc:
+        raise IngestionMetadataError(
+            f"Failed to complete ingestion source {ingestion_source_id}."
+        ) from exc
+
+    if result.rowcount != 1:
+        raise IngestionSourceStateError(
+            f"Ingestion source {ingestion_source_id} is not in PENDING state."
+        )
+
+
+def fail_ingestion_source(
+    engine: Engine,
+    ingestion_source_id: int,
+    rows_read: int,
+    rows_loaded: int,
+    error_message: str,
+) -> None:
+    """Mark a PENDING ingestion source as failed."""
+    finished_at = datetime.now(UTC)
+
+    query = text(
+        """
+        UPDATE metadata.ingestion_sources
+        SET
+            source_status = 'FAILED',
+            rows_read = :rows_read,
+            rows_loaded = :rows_loaded,
+            finished_at = :finished_at,
+            error_message = :error_message
+        WHERE ingestion_source_id = :ingestion_source_id
+          AND source_status = 'PENDING'
+        """
+    )
+
+    try:
+        with engine.begin() as connection:
+            result = connection.execute(
+                query,
+                {
+                    "ingestion_source_id": ingestion_source_id,
+                    "rows_read": rows_read,
+                    "rows_loaded": rows_loaded,
+                    "finished_at": finished_at,
+                    "error_message": error_message,
+                },
+            )
+    except SQLAlchemyError as exc:
+        raise IngestionMetadataError(
+            f"Failed to mark ingestion source {ingestion_source_id} as failed."
+        ) from exc
+
+    if result.rowcount != 1:
+        raise IngestionSourceStateError(
+            f"Ingestion source {ingestion_source_id} is not in PENDING state."
+        )

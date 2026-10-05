@@ -7,10 +7,13 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from datapulse.ingestion_metadata import (
     IngestionMetadataError,
+    IngestionSourceStateError,
     apply_ingestion_source_row_counts,
     apply_ingestion_sources_table,
     complete_ingestion_run,
+    complete_ingestion_source,
     fail_ingestion_run,
+    fail_ingestion_source,
     start_ingestion_run,
 )
 
@@ -62,6 +65,8 @@ def test_start_ingestion_run_rejects_empty_source() -> None:
         match="source_name must not be empty",
     ):
         start_ingestion_run(engine, source_name="")
+
+    engine.begin.assert_not_called()
 
 
 def test_start_ingestion_run_rejects_negative_rows() -> None:
@@ -344,14 +349,27 @@ def test_ingestion_source_row_counts_migration_exists() -> None:
     assert migration_path.exists()
 
 
-def test_apply_ingestion_source_row_counts_executes_migration() -> None:
+def test_apply_ingestion_source_row_counts_executes_migration(
+    tmp_path: Path,
+) -> None:
     engine = MagicMock()
+    connection = MagicMock()
+    engine.begin.return_value.__enter__.return_value = connection
 
-    apply_ingestion_source_row_counts(engine)
+    migration_path = tmp_path / "012_add_ingestion_source_row_counts.sql"
+    migration_path.write_text(
+        "ALTER TABLE metadata.ingestion_sources ADD COLUMN IF NOT EXISTS rows_read BIGINT",
+        encoding="utf-8",
+    )
 
-    engine.begin.assert_called_once()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "datapulse.ingestion_metadata.MIGRATIONS_DIR",
+            tmp_path,
+        )
 
-    connection = engine.begin.return_value.__enter__.return_value
+        apply_ingestion_source_row_counts(engine)
+
     connection.execute.assert_called_once()
 
 
@@ -389,3 +407,187 @@ def test_apply_ingestion_source_row_counts_is_idempotent() -> None:
 
     connection = engine.begin.return_value.__enter__.return_value
     assert connection.execute.call_count == 2
+
+
+def test_complete_ingestion_source_marks_pending_source_success() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    result = MagicMock()
+
+    result.rowcount = 1
+    connection.execute.return_value = result
+    engine.begin.return_value.__enter__.return_value = connection
+
+    complete_ingestion_source(
+        engine,
+        ingestion_source_id=101,
+        rows_read=5000,
+        rows_loaded=4997,
+    )
+
+    query = connection.execute.call_args.args[0]
+    parameters = connection.execute.call_args.args[1]
+
+    assert "source_status = 'SUCCESS'" in str(query)
+    assert parameters["ingestion_source_id"] == 101
+    assert parameters["rows_read"] == 5000
+    assert parameters["rows_loaded"] == 4997
+    assert isinstance(parameters["finished_at"], datetime)
+    assert "error_message = NULL" in str(query)
+
+
+def test_fail_ingestion_source_marks_pending_source_failed() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    result = MagicMock()
+
+    result.rowcount = 1
+    connection.execute.return_value = result
+    engine.begin.return_value.__enter__.return_value = connection
+
+    fail_ingestion_source(
+        engine,
+        ingestion_source_id=101,
+        rows_read=5000,
+        rows_loaded=0,
+        error_message="raw database load failed",
+    )
+
+    query = connection.execute.call_args.args[0]
+    parameters = connection.execute.call_args.args[1]
+
+    assert "source_status = 'FAILED'" in str(query)
+    assert parameters["ingestion_source_id"] == 101
+    assert parameters["rows_read"] == 5000
+    assert parameters["rows_loaded"] == 0
+    assert parameters["error_message"] == "raw database load failed"
+    assert isinstance(parameters["finished_at"], datetime)
+
+
+def test_complete_ingestion_source_rejects_non_pending_source() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    result = MagicMock()
+
+    result.rowcount = 0
+    connection.execute.return_value = result
+    engine.begin.return_value.__enter__.return_value = connection
+
+    with pytest.raises(
+        IngestionSourceStateError,
+        match="is not in PENDING state",
+    ):
+        complete_ingestion_source(
+            engine,
+            ingestion_source_id=101,
+            rows_read=5000,
+            rows_loaded=4997,
+        )
+
+
+def test_fail_ingestion_source_rejects_non_pending_source() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    result = MagicMock()
+
+    result.rowcount = 0
+    connection.execute.return_value = result
+    engine.begin.return_value.__enter__.return_value = connection
+
+    with pytest.raises(
+        IngestionSourceStateError,
+        match="is not in PENDING state",
+    ):
+        fail_ingestion_source(
+            engine,
+            ingestion_source_id=101,
+            rows_read=5000,
+            rows_loaded=0,
+            error_message="load failed",
+        )
+
+
+def test_complete_ingestion_source_uses_one_transaction() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    result = MagicMock()
+
+    result.rowcount = 1
+    connection.execute.return_value = result
+    engine.begin.return_value.__enter__.return_value = connection
+
+    complete_ingestion_source(
+        engine,
+        ingestion_source_id=101,
+        rows_read=10,
+        rows_loaded=10,
+    )
+
+    engine.begin.assert_called_once()
+    connection.execute.assert_called_once()
+
+
+def test_fail_ingestion_source_uses_one_transaction() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    result = MagicMock()
+
+    result.rowcount = 1
+    connection.execute.return_value = result
+    engine.begin.return_value.__enter__.return_value = connection
+
+    fail_ingestion_source(
+        engine,
+        ingestion_source_id=101,
+        rows_read=10,
+        rows_loaded=0,
+        error_message="load failed",
+    )
+
+    engine.begin.assert_called_once()
+    connection.execute.assert_called_once()
+
+
+def test_complete_ingestion_source_wraps_database_error() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    engine.begin.return_value.__enter__.return_value = connection
+
+    original_error = SQLAlchemyError("database failure")
+    connection.execute.side_effect = original_error
+
+    with pytest.raises(
+        IngestionMetadataError,
+        match="Failed to complete ingestion source",
+    ) as exc_info:
+        complete_ingestion_source(
+            engine,
+            ingestion_source_id=101,
+            rows_read=10,
+            rows_loaded=10,
+        )
+
+    assert exc_info.value.__cause__ is original_error
+
+
+def test_fail_ingestion_source_wraps_database_error() -> None:
+    engine = MagicMock()
+    connection = MagicMock()
+    engine.begin.return_value.__enter__.return_value = connection
+
+    original_error = SQLAlchemyError("database failure")
+    connection.execute.side_effect = original_error
+
+    with pytest.raises(
+        IngestionMetadataError,
+        match="Failed to mark ingestion source",
+    ) as exc_info:
+        fail_ingestion_source(
+            engine,
+            ingestion_source_id=101,
+            rows_read=10,
+            rows_loaded=0,
+            error_message="load failed",
+        )
+
+    assert exc_info.value.__cause__ is original_error
