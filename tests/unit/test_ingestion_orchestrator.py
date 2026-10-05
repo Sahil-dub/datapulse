@@ -265,6 +265,146 @@ def test_ingest_source_uses_default_batch_size(monkeypatch) -> None:
     assert load_raw.call_args.kwargs["batch_size"] == 1_000
 
 
+
+def test_ingest_source_short_circuits_after_schema_validation_failure(monkeypatch) -> None:
+    engine = MagicMock()
+    request = IngestionRequest(
+        source_name="customers",
+        source_file_path=Path("customers.csv"),
+    )
+    dataframe = pd.DataFrame([{"customer_id": "C001"}])
+    validate_schema = MagicMock(side_effect=RuntimeError("schema validation failed"))
+    load_raw = MagicMock()
+    fail_source = MagicMock()
+    fail_run = MagicMock()
+
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.start_ingestion_run",
+        MagicMock(return_value=10),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.start_ingestion_source",
+        MagicMock(return_value=20),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.read_csv_file",
+        MagicMock(return_value=dataframe),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.get_source_columns",
+        MagicMock(return_value=("customer_id",)),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.validate_csv_schema",
+        validate_schema,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.load_dataframe_to_raw_in_batches",
+        load_raw,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.fail_ingestion_source",
+        fail_source,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.fail_ingestion_run",
+        fail_run,
+    )
+
+    result = ingest_source(engine, request)
+
+    assert result.outcome is IngestionOutcome.FAILED
+    validate_schema.assert_called_once()
+    load_raw.assert_not_called()
+    fail_source.assert_called_once()
+    fail_run.assert_called_once()
+
+
+def test_ingest_source_completes_source_before_run(monkeypatch) -> None:
+    engine = MagicMock()
+    request = IngestionRequest(
+        source_name="customers",
+        source_file_path=Path("customers.csv"),
+    )
+    dataframe = pd.DataFrame([{"customer_id": "C001"}])
+    call_order: list[str] = []
+
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.start_ingestion_run",
+        lambda *_args, **_kwargs: call_order.append("start_run") or 10,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.start_ingestion_source",
+        lambda *_args, **_kwargs: call_order.append("start_source") or 20,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.read_csv_file",
+        lambda *_args, **_kwargs: call_order.append("read") or dataframe,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.get_source_columns",
+        lambda *_args, **_kwargs: ("customer_id",),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.validate_csv_schema",
+        lambda *_args, **_kwargs: call_order.append("validate"),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.load_dataframe_to_raw_in_batches",
+        lambda *_args, **_kwargs: call_order.append("load") or 1,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.complete_ingestion_source",
+        lambda *_args, **_kwargs: call_order.append("complete_source"),
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.complete_ingestion_run",
+        lambda *_args, **_kwargs: call_order.append("complete_run"),
+    )
+
+    result = ingest_source(engine, request)
+
+    assert result.outcome is IngestionOutcome.SUCCESS
+    assert call_order == [
+        "start_run",
+        "start_source",
+        "read",
+        "validate",
+        "load",
+        "complete_source",
+        "complete_run",
+    ]
+
+
+def test_ingest_source_propagates_metadata_start_failure(monkeypatch) -> None:
+    engine = MagicMock()
+    request = IngestionRequest(
+        source_name="customers",
+        source_file_path=Path("customers.csv"),
+    )
+    start_error = RuntimeError("metadata database unavailable")
+    start_run = MagicMock(side_effect=start_error)
+    start_source = MagicMock()
+
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.start_ingestion_run",
+        start_run,
+    )
+    monkeypatch.setattr(
+        "datapulse.ingestion_orchestrator.start_ingestion_source",
+        start_source,
+    )
+
+    try:
+        ingest_source(engine, request)
+    except RuntimeError as exc:
+        assert exc is start_error
+    else:
+        raise AssertionError("metadata start failure was not propagated")
+
+    start_run.assert_called_once_with(engine, source_name="customers")
+    start_source.assert_not_called()
+
 def test_ingest_source_marks_failure_when_file_read_fails(monkeypatch) -> None:
     engine = MagicMock()
     request = IngestionRequest(
