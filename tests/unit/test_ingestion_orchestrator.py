@@ -265,7 +265,6 @@ def test_ingest_source_uses_default_batch_size(monkeypatch) -> None:
     assert load_raw.call_args.kwargs["batch_size"] == 1_000
 
 
-
 def test_ingest_source_marks_failure_when_file_read_fails(monkeypatch) -> None:
     engine = MagicMock()
     request = IngestionRequest(
