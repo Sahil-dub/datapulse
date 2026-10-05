@@ -1,0 +1,4 @@
+customer_id,first_name,last_name,email,country,signup_date,customer_status,acquisition_channel
+INT-CUST-001,Asha,Mehta,asha.integration@example.com,DE,2025-01-15,active,organic
+INT-CUST-002,Ravi,Shah,ravi.integration@example.com,DE,2025-02-20,active,paid_search
+INT-CUST-003,Lena,Fischer,lena.integration@example.com,DE,2025-03-05,inactive,referral
