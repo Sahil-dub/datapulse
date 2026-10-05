@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
 from sqlalchemy import Engine
 
 from datapulse.csv_validation import validate_csv_schema
 from datapulse.db_loader import load_dataframe_to_raw_in_batches
 from datapulse.file_reader import read_csv_file
-from datapulse.ingestion_contract import IngestionRequest, IngestionResult, IngestionOutcome
+from datapulse.ingestion_contract import (
+    IngestionOutcome,
+    IngestionRequest,
+    IngestionResult,
+)
 from datapulse.ingestion_metadata import (
     complete_ingestion_run,
     complete_ingestion_source,
