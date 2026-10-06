@@ -1,0 +1,4 @@
+customer_id,first_name,last_name,email,country,signup_date,customer_status,acquisition_channel
+INT-CUST-DB-001,First,Good,first.db@example.com,DE,2025-05-01,active,organic
+INT-CUST-DB-002,Second,Good,second.db@example.com,DE,2025-05-02,active,referral
+INT-CUST-DB-FAIL,Third,Failure,third.db@example.com,DE,2025-05-03,active,paid_search
