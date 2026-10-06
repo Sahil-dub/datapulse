@@ -8,11 +8,8 @@ from datapulse.ingestion_contract import IngestionOutcome, IngestionRequest
 from datapulse.ingestion_orchestrator import ingest_source
 from datapulse.settings import Settings
 
-
 FIXTURE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "customers_integration_db_failure.csv"
+    Path(__file__).resolve().parents[1] / "fixtures" / "customers_integration_db_failure.csv"
 )
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "sql" / "migrations"
 
@@ -80,25 +77,15 @@ def _remove_failure_trigger(engine) -> None:
                 """
             )
         )
-        connection.execute(
-            text(
-                "DROP FUNCTION IF EXISTS datapulse_test_fail_customer_insert();"
-            )
-        )
+        connection.execute(text("DROP FUNCTION IF EXISTS datapulse_test_fail_customer_insert();"))
 
 
 def _cleanup_data(engine) -> None:
     with engine.begin() as connection:
+        connection.execute(text("DELETE FROM raw.customers WHERE customer_id LIKE 'INT-CUST-DB-%'"))
         connection.execute(
             text(
-                "DELETE FROM raw.customers "
-                "WHERE customer_id LIKE 'INT-CUST-DB-%'"
-            )
-        )
-        connection.execute(
-            text(
-                "DELETE FROM metadata.ingestion_sources "
-                "WHERE source_file_path = :source_file_path"
+                "DELETE FROM metadata.ingestion_sources WHERE source_file_path = :source_file_path"
             ),
             {"source_file_path": str(FIXTURE_PATH)},
         )
@@ -159,10 +146,7 @@ def test_ingest_source_rolls_back_real_postgres_load_failure() -> None:
             ).one()
 
             raw_count = connection.execute(
-                text(
-                    "SELECT COUNT(*) FROM raw.customers "
-                    "WHERE customer_id LIKE 'INT-CUST-DB-%'"
-                )
+                text("SELECT COUNT(*) FROM raw.customers WHERE customer_id LIKE 'INT-CUST-DB-%'")
             ).scalar_one()
 
         assert tuple(run_row) == (
