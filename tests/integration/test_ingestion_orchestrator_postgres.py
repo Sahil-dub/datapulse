@@ -8,7 +8,6 @@ from datapulse.ingestion_contract import IngestionOutcome, IngestionRequest
 from datapulse.ingestion_orchestrator import ingest_source
 from datapulse.settings import Settings
 
-
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "customers_integration.csv"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "sql" / "migrations"
 
@@ -35,16 +34,10 @@ def _create_integration_engine():
 
 def _cleanup_success_data(engine) -> None:
     with engine.begin() as connection:
+        connection.execute(text("DELETE FROM raw.customers WHERE customer_id LIKE 'INT-CUST-%'"))
         connection.execute(
             text(
-                "DELETE FROM raw.customers "
-                "WHERE customer_id LIKE 'INT-CUST-%'"
-            )
-        )
-        connection.execute(
-            text(
-                "DELETE FROM metadata.ingestion_sources "
-                "WHERE source_file_path = :source_file_path"
+                "DELETE FROM metadata.ingestion_sources WHERE source_file_path = :source_file_path"
             ),
             {"source_file_path": str(FIXTURE_PATH)},
         )
@@ -64,8 +57,7 @@ def _cleanup_failure_data(engine, source_file_path: Path) -> None:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "DELETE FROM metadata.ingestion_sources "
-                "WHERE source_file_path = :source_file_path"
+                "DELETE FROM metadata.ingestion_sources WHERE source_file_path = :source_file_path"
             ),
             {"source_file_path": str(source_file_path)},
         )
@@ -123,11 +115,7 @@ def test_ingest_source_completes_real_postgres_successfully() -> None:
             ).one()
 
             raw_count = connection.execute(
-                text(
-                    "SELECT COUNT(*) "
-                    "FROM raw.customers "
-                    "WHERE customer_id LIKE 'INT-CUST-%'"
-                )
+                text("SELECT COUNT(*) FROM raw.customers WHERE customer_id LIKE 'INT-CUST-%'")
             ).scalar_one()
 
         assert tuple(run_row) == ("SUCCESS", expected_rows, expected_rows, None)
@@ -183,11 +171,7 @@ def test_ingest_source_records_real_postgres_schema_failure() -> None:
             ).one()
 
             raw_count = connection.execute(
-                text(
-                    "SELECT COUNT(*) "
-                    "FROM raw.customers "
-                    "WHERE customer_id = 'INT-CUST-FAIL'"
-                )
+                text("SELECT COUNT(*) FROM raw.customers WHERE customer_id = 'INT-CUST-FAIL'")
             ).scalar_one()
 
         assert run_row[0] == "FAILED"
