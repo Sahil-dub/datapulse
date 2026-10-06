@@ -46,7 +46,7 @@ The PostgreSQL service was validated through a complete local lifecycle:
 8. The PostgreSQL container and Compose network were stopped and recreated successfully.
 9. The application successfully reconnected after recreation.
 10. The working tree remained clean.
-11. git diff --check passed.
+11. `git diff --check` passed.
 
 ## Result
 
@@ -54,6 +54,6 @@ The DataPulse project now has a reproducible, repository-managed local PostgreSQ
 
 ## Governance
 
-3H.1 is formally closed only after this completion record is committed and pushed to eature/data-ingestion.
+3H.1 is formally closed after this completion record was committed and pushed to `feature/data-ingestion`.
 
 CI status checks are not configured for this repository, so no CI result is claimed as part of this milestone.
