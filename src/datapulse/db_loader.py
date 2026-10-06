@@ -84,7 +84,7 @@ def load_dataframe_to_raw(
             _load_rows(connection, source_name, source_columns, rows)
     except SQLAlchemyError as exc:
         raise DBLoaderError(
-            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
+            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}: {exc}"
         ) from exc
 
     return len(rows)
@@ -116,13 +116,13 @@ def load_dataframe_to_raw_in_batches(
                 except SQLAlchemyError as exc:
                     raise DBLoaderError(
                         f"{source_name}: failed to load batch {batch_number} "
-                        f"into {RAW_TABLES[source_name]}."
+                        f"into {RAW_TABLES[source_name]}: {exc}"
                     ) from exc
     except DBLoaderError:
         raise
     except SQLAlchemyError as exc:
         raise DBLoaderError(
-            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}."
+            f"{source_name}: failed to load data into {RAW_TABLES[source_name]}: {exc}"
         ) from exc
 
     return total_rows
