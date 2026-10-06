@@ -16,16 +16,44 @@ CUSTOMER_STAGING_SQL = text(
         CASE
             WHEN signup_date IS NULL OR BTRIM(signup_date) = '' THEN NULL
             WHEN BTRIM(signup_date) ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                AND TO_CHAR(TO_DATE(BTRIM(signup_date), 'YYYY-MM-DD'), 'YYYY-MM-DD')
-                    = BTRIM(signup_date)
+                AND split_part(BTRIM(signup_date), '-', 2)::INTEGER BETWEEN 1 AND 12
+                AND split_part(BTRIM(signup_date), '-', 3)::INTEGER >= 1
+                AND split_part(BTRIM(signup_date), '-', 3)::INTEGER <=
+                    CASE split_part(BTRIM(signup_date), '-', 2)::INTEGER
+                        WHEN 2 THEN
+                            28 + CASE
+                                WHEN split_part(BTRIM(signup_date), '-', 1)::INTEGER % 400 = 0
+                                    OR (
+                                        split_part(BTRIM(signup_date), '-', 1)::INTEGER % 4 = 0
+                                        AND split_part(BTRIM(signup_date), '-', 1)::INTEGER % 100 <> 0
+                                    )
+                                THEN 1 ELSE 0
+                            END
+                        WHEN 4, 6, 9, 11 THEN 30
+                        ELSE 31
+                    END
             THEN TO_DATE(BTRIM(signup_date), 'YYYY-MM-DD')
             ELSE NULL
         END,
         CASE
             WHEN signup_date IS NULL OR BTRIM(signup_date) = '' THEN NULL
             WHEN BTRIM(signup_date) ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                AND TO_CHAR(TO_DATE(BTRIM(signup_date), 'YYYY-MM-DD'), 'YYYY-MM-DD')
-                    = BTRIM(signup_date)
+                AND split_part(BTRIM(signup_date), '-', 2)::INTEGER BETWEEN 1 AND 12
+                AND split_part(BTRIM(signup_date), '-', 3)::INTEGER >= 1
+                AND split_part(BTRIM(signup_date), '-', 3)::INTEGER <=
+                    CASE split_part(BTRIM(signup_date), '-', 2)::INTEGER
+                        WHEN 2 THEN
+                            28 + CASE
+                                WHEN split_part(BTRIM(signup_date), '-', 1)::INTEGER % 400 = 0
+                                    OR (
+                                        split_part(BTRIM(signup_date), '-', 1)::INTEGER % 4 = 0
+                                        AND split_part(BTRIM(signup_date), '-', 1)::INTEGER % 100 <> 0
+                                    )
+                                THEN 1 ELSE 0
+                            END
+                        WHEN 4, 6, 9, 11 THEN 30
+                        ELSE 31
+                    END
             THEN TRUE
             ELSE FALSE
         END,
