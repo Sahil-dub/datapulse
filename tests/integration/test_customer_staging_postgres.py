@@ -91,16 +91,20 @@ def test_stage_customer_exposes_invalid_and_missing_signup_dates() -> None:
 
     try:
         with engine.begin() as connection:
-            rows = connection.execute(
-                text(
-                    """
-                    INSERT INTO raw.customers (customer_id, signup_date)
-                    VALUES ('STG-CUST-INVALID', '2025-02-30'),
-                           ('STG-CUST-MISSING', NULL)
-                    RETURNING raw_record_id
-                    """
+            rows = (
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO raw.customers (customer_id, signup_date)
+                        VALUES ('STG-CUST-INVALID', '2025-02-30'),
+                               ('STG-CUST-MISSING', NULL)
+                        RETURNING raw_record_id
+                        """
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         for raw_record_id in rows:
             stage_customer(engine, raw_record_id)
@@ -133,16 +137,20 @@ def test_stage_customer_preserves_duplicate_business_ids() -> None:
 
     try:
         with engine.begin() as connection:
-            rows = connection.execute(
-                text(
-                    """
-                    INSERT INTO raw.customers (customer_id, signup_date)
-                    VALUES ('STG-CUST-DUP', '2025-01-01'),
-                           ('STG-CUST-DUP', '2025-01-02')
-                    RETURNING raw_record_id
-                    """
+            rows = (
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO raw.customers (customer_id, signup_date)
+                        VALUES ('STG-CUST-DUP', '2025-01-01'),
+                               ('STG-CUST-DUP', '2025-01-02')
+                        RETURNING raw_record_id
+                        """
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         for raw_record_id in rows:
             stage_customer(engine, raw_record_id)
